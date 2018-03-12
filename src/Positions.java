@@ -3,7 +3,6 @@ import com.eclipsesource.json.JsonArray;
 import com.eclipsesource.json.JsonObject;
 import javafx.util.Pair;
 import org.jsoup.Jsoup;
-import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import pt.lsts.imc.RemoteSensorInfo;
 import pt.lsts.imc.net.ConnectFilter;
@@ -11,7 +10,6 @@ import pt.lsts.imc.net.IMCProtocol;
 import pt.lsts.util.WGS84Utilities;
 
 
-import javax.swing.*;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -19,16 +17,13 @@ import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 
 
 public class Positions {
 
-    public static int imcid;
-    public static String sensorClass;
+    private static int imcid;
+    private static String sensorClass;
     public static IMCProtocol proto;
 
 
@@ -37,7 +32,7 @@ public class Positions {
         get();
     }
 
-    public static void get() throws IOException{
+    private static void get() throws IOException {
 
 
         boolean fetchAUVType = true;
@@ -116,6 +111,11 @@ public class Positions {
         String longitude;
         String previous=null;
         String current=null;
+        double lastLat = 0;
+        double lastLon = 0;
+        double penumLat = 0;
+        double penumLon = 0;
+
         LinkedHashMap<String, Integer> data= new LinkedHashMap<>();
         org.jsoup.nodes.Document doc = Jsoup.parse(resp);
 
@@ -140,16 +140,20 @@ public class Positions {
                     longitude=links.get(i-2).toString();
                     longitude=longitude.replaceAll("[^\\.0123456789-]","");
                     double lon= Double.parseDouble(longitude);
+
                     vehicleData.put(previous, new Pair<>( lat,lon));
+
                 }
                 if(links.get(i+4).equals(links.last())){
 
                     latitude=links.get(i+2).toString();
                     latitude=latitude.replaceAll("[^\\.0123456789-]","");
                     double lat= Double.parseDouble(latitude);
+                    lastLat = lat;
                     longitude=links.get(i+3).toString();
                     longitude=longitude.replaceAll("[^\\.0123456789-]","");
                     double lon= Double.parseDouble(longitude);
+                    lastLon = lon;
                     vehicleData.put(current, new Pair<>(lat, lon));
 
                 }
@@ -162,10 +166,7 @@ public class Positions {
             }
 
 
-
-
-
-            publishToNeptus(vehicleData, data);
+            publishToNeptus(vehicleData, data, lastLat, lastLon);
             publishToRipples(vehicleData, data);
 
 
@@ -176,21 +177,32 @@ public class Positions {
     }
 
 
+    private static void publishToNeptus(LinkedHashMap<String, Pair<Double, Double>> vehicleData, LinkedHashMap<String, Integer> data, double lastLat, double lastLon) {
 
 
-    private static void publishToNeptus(LinkedHashMap<String, Pair<Double, Double>> vehicleData, LinkedHashMap<String, Integer> data){
+        RemoteSensorInfo info = new RemoteSensorInfo();
+        double ySpeed;
+        double xSpeed;
 
 
-   /*  RemoteSensorInfo info = new RemoteSensorInfo();
 
-        info.setLat(Math.toRadians(lat));
-        info.setLon(Math.toRadians(lon));
+        /*for(String s: data.keySet()){
 
-        info.setHeading((float) Math.atan2(ySpeed, xSpeed));
-
+            info.setLat(Math.toRadians(vehicleData.get(s).getKey()));
+            info.setLon(Math.toRadians(vehicleData.get(s).getValue()));
+            info.setHeading((float) Math.atan2(ySpeed, xSpeed));
 //baseado na ultima posicao calcular essa deslocacao
-        info.setSensorClass(sensorClass);
-        info.setId(vehicle);
+//mudar o sensorClass tbm
+            info.setSensorClass(sensorClass);
+            info.setId(s);
+
+
+        }
+
+
+
+/*
+
         try {
 
             proto.setAutoConnect(ConnectFilter.CCUS_ONLY);
@@ -198,9 +210,7 @@ public class Positions {
             System.out.println("Posting " + info);
         } catch (Exception e) {
             e.printStackTrace();
-        }
-*/
-
+        }*/
 
 
     }
@@ -213,27 +223,19 @@ public class Positions {
 
         JsonObject obj = new JsonObject();
 
+        System.out.println(data.keySet().size());
 
-        for (Map.Entry<String, Integer> entry : data.entrySet()) {
+        for (String s : data.keySet()) {
+            obj.add("imcid", data.get(s));
+            obj.add("name", s);
+            obj.add("coordinates", new JsonArray().add(vehicleData.get(s).getKey()).add(vehicleData.get(s).getValue()));
 
-            obj.add("imcid", entry.getValue());
-
-        }
-        for(Map.Entry<String,Pair<Double ,Double >>entry2: vehicleData.entrySet()) {
-
-            obj.add("name", entry2.getKey());
-
-        }
-        for(Map.Entry<String,Pair<Double, Double >>entry2: vehicleData.entrySet()) {
-
-            obj.add("coordinates", new JsonArray().add(entry2.getValue().getKey()).add(entry2.getValue().getValue()));
-
+            obj.add("iridium", "");
+            obj.add("created_at", fmt.format(new Date()));
+            obj.add("updated_at", fmt.format(new Date()));
         }
 
 
-        obj.add("iridium", "");
-        obj.add("created_at", fmt.format(new Date()));
-        obj.add("updated_at", fmt.format(new Date()));
 
         System.out.println(obj);
 
