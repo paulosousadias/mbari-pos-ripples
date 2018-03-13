@@ -7,7 +7,6 @@ import org.jsoup.select.Elements;
 import pt.lsts.imc.RemoteSensorInfo;
 import pt.lsts.imc.net.ConnectFilter;
 import pt.lsts.imc.net.IMCProtocol;
-import pt.lsts.util.WGS84Utilities;
 
 
 import java.io.BufferedReader;
@@ -23,10 +22,14 @@ import java.util.*;
 public class Positions {
 
     private static int imcid;
-    private static String sensorClass;
-    public static IMCProtocol proto;
-
-
+    private static final LinkedHashMap<String, String> sensorClass = new LinkedHashMap<>();
+    private static String sensorClass2;
+    private static HashMap<String, String> typeRqstLst = new LinkedHashMap<>();
+    private static double lastLat = 0;
+    private static double lastLon = 0;
+    private static double penumLat = 0;
+    private static double penumLon = 0;
+    private static IMCProtocol proto;
     public static void main(String[] args) throws Exception {
 
         get();
@@ -49,30 +52,33 @@ public class Positions {
 
 
 
-        HashMap<String, String> typeRqstLst = new LinkedHashMap<>();
+
         if (fetchAUVType){
             typeRqstLst.put("auv/", "AUV");
-            sensorClass= "AUV";}
+
+        }
         if (fetchGliderType) {
             typeRqstLst.put("glider/", "GLIDER");
-            sensorClass= "Glider";
+
         }
         if (fetchDrifterType) {
             typeRqstLst.put("drifter/", "DRIFTER");
-            sensorClass= "Drifter";
+
         }
         if (fetchShipType) {
             typeRqstLst.put("ship/", "SHIP");
-            sensorClass= "Ship";
         }
         if (fetchAISType) {
             typeRqstLst.put("uav/", "AIS");
-            sensorClass= "AIS";
+
         }
+
 
         for (String typeRqst : typeRqstLst.keySet()) {
 
-            String url = "http://odss.mbari.org/trackingdb/" + "positionOfType/" + typeRqst + "last/" + 3 + "h/data.html";
+            String url = "http://odss.mbari.org/trackingdb/" + "positionOfType/" + typeRqst + "last/" + 1 + "h/data.html";
+
+            sensorClass2 = typeRqst;
 
 
             URL obj = new URL(url);
@@ -91,7 +97,7 @@ public class Positions {
             BufferedReader in = new BufferedReader(
                     new InputStreamReader(con.getInputStream()));
             String inputLine;
-            StringBuffer response = new StringBuffer();
+            StringBuilder response = new StringBuilder();
 
             while ((inputLine = in.readLine()) != null) {
                 response.append(inputLine);
@@ -100,6 +106,7 @@ public class Positions {
 
 
             parsing(response.toString());
+
 
         }
     }
@@ -110,49 +117,49 @@ public class Positions {
         String latitude;
         String longitude;
         String previous=null;
-        String current=null;
-        double lastLat = 0;
-        double lastLon = 0;
-        double penumLat = 0;
-        double penumLon = 0;
+        String current;
 
-        LinkedHashMap<String, Integer> data= new LinkedHashMap<>();
+
+        final LinkedHashMap<String, Integer> data = new LinkedHashMap<>();
         org.jsoup.nodes.Document doc = Jsoup.parse(resp);
 
         Elements links = doc.select("td");
         if (links.size() > 5) {
 
-            for(int i=0; i < links.size(); i=i+5){
+            for (int i = 0; i < links.size(); i = i + 5) {
 
-                if(i==0){
-                    previous = String.valueOf(links.get(i ));
-                    previous=previous.substring(previous.indexOf(">") +1, previous.indexOf("/") -1);
-
-                }
-
-                current = String.valueOf(links.get(i ));
-                current= current.substring(current.indexOf(">") +1, current.indexOf("/") -1);
-                if(!previous.equals(current)){
-                    latitude=links.get(i-3).toString();
-                    latitude=latitude.replaceAll("[^\\.0123456789-]","");
-                    double lat= Double.parseDouble(latitude);
-
-                    longitude=links.get(i-2).toString();
-                    longitude=longitude.replaceAll("[^\\.0123456789-]","");
-                    double lon= Double.parseDouble(longitude);
-
-                    vehicleData.put(previous, new Pair<>( lat,lon));
+                if (i == 0) {
+                    previous = String.valueOf(links.get(i));
+                    previous = previous.substring(previous.indexOf(">") + 1, previous.indexOf("/") - 1);
 
                 }
-                if(links.get(i+4).equals(links.last())){
 
-                    latitude=links.get(i+2).toString();
-                    latitude=latitude.replaceAll("[^\\.0123456789-]","");
-                    double lat= Double.parseDouble(latitude);
+                current = String.valueOf(links.get(i));
+                current = current.substring(current.indexOf(">") + 1, current.indexOf("/") - 1);
+                if (!previous.equals(current)) {
+                    latitude = links.get(i - 3).toString();
+                    latitude = latitude.replaceAll("[^\\.0123456789-]", "");
+                    double lat = Double.parseDouble(latitude);
+                    longitude = links.get(i - 2).toString();
+                    longitude = longitude.replaceAll("[^\\.0123456789-]", "");
+                    double lon = Double.parseDouble(longitude);
+                    penumLon = lon;
+
+                    vehicleData.put(previous, new Pair<>(lat, lon));
+
+                }
+                if (links.get(i + 4).equals(links.last())) {
+                    penumLat = Double.parseDouble(links.get(i - 3).toString().replaceAll("[^\\.0123456789-]", ""));
+                    penumLon = Double.parseDouble(links.get(i - 2).toString().replaceAll("[^\\.0123456789-]", ""));
+
+
+                    latitude = links.get(i + 2).toString();
+                    latitude = latitude.replaceAll("[^\\.0123456789-]", "");
+                    double lat = Double.parseDouble(latitude);
                     lastLat = lat;
-                    longitude=links.get(i+3).toString();
-                    longitude=longitude.replaceAll("[^\\.0123456789-]","");
-                    double lon= Double.parseDouble(longitude);
+                    longitude = links.get(i + 3).toString();
+                    longitude = longitude.replaceAll("[^\\.0123456789-]", "");
+                    double lon = Double.parseDouble(longitude);
                     lastLon = lon;
                     vehicleData.put(current, new Pair<>(lat, lon));
 
@@ -162,11 +169,12 @@ public class Positions {
                 synchronized (data) {
                     data.put(current, ++imcid);
                 }
-
+                synchronized (sensorClass) {
+                    sensorClass.put(current, String.valueOf(sensorClass2));
+                }
             }
 
-
-            publishToNeptus(vehicleData, data, lastLat, lastLon);
+            publishToNeptus(vehicleData, data);
             publishToRipples(vehicleData, data);
 
 
@@ -177,40 +185,40 @@ public class Positions {
     }
 
 
-    private static void publishToNeptus(LinkedHashMap<String, Pair<Double, Double>> vehicleData, LinkedHashMap<String, Integer> data, double lastLat, double lastLon) {
+    private static void publishToNeptus(LinkedHashMap<String, Pair<Double, Double>> vehicleData, LinkedHashMap<String, Integer> data) {
 
+
+        if (proto == null) {
+            proto = new IMCProtocol();
+        }
+
+        double distance = Math.hypot(lastLat - penumLon, lastLon - penumLon);
 
         RemoteSensorInfo info = new RemoteSensorInfo();
-        double ySpeed;
-        double xSpeed;
-
-
-
-        /*for(String s: data.keySet()){
+        System.out.println(data.keySet());
+        for (String s : data.keySet()) {
 
             info.setLat(Math.toRadians(vehicleData.get(s).getKey()));
             info.setLon(Math.toRadians(vehicleData.get(s).getValue()));
-            info.setHeading((float) Math.atan2(ySpeed, xSpeed));
-//baseado na ultima posicao calcular essa deslocacao
-//mudar o sensorClass tbm
-            info.setSensorClass(sensorClass);
-            info.setId(s);
+            info.setHeading((float) Math.atan2(penumLat - lastLat, penumLon - lastLon));
 
+            String setSensor = sensorClass.get(s).replace("/", "");
+            info.setSensorClass(setSensor);
+            info.setId(s);
+            System.out.println("Posting " + info);
 
         }
 
 
 
-/*
 
         try {
 
             proto.setAutoConnect(ConnectFilter.CCUS_ONLY);
             proto.sendToPeers(info);
-            System.out.println("Posting " + info);
         } catch (Exception e) {
             e.printStackTrace();
-        }*/
+        }
 
 
     }
@@ -223,7 +231,6 @@ public class Positions {
 
         JsonObject obj = new JsonObject();
 
-        System.out.println(data.keySet().size());
 
         for (String s : data.keySet()) {
             obj.add("imcid", data.get(s));
@@ -235,9 +242,8 @@ public class Positions {
             obj.add("updated_at", fmt.format(new Date()));
         }
 
-
-
         System.out.println(obj);
+
 
         URL url = new URL(ripplesUrl);
         HttpURLConnection httpCon = (HttpURLConnection) url.openConnection();
