@@ -7,6 +7,7 @@ import org.jsoup.select.Elements;
 import pt.lsts.imc.RemoteSensorInfo;
 import pt.lsts.imc.net.ConnectFilter;
 import pt.lsts.imc.net.IMCProtocol;
+import pt.lsts.neptus.messages.listener.Periodic;
 
 
 import java.io.BufferedReader;
@@ -30,11 +31,25 @@ public class Positions {
     private static double penumLat = 0;
     private static double penumLon = 0;
     private static IMCProtocol proto;
+
+
     public static void main(String[] args) throws Exception {
+        new Thread(() -> {
+            while (true) {
+                try {
+                    get();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                try {
+                    Thread.sleep(100000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
 
-        get();
     }
-
     private static void get() throws IOException {
 
 
@@ -137,30 +152,30 @@ public class Positions {
                 current = String.valueOf(links.get(i));
                 current = current.substring(current.indexOf(">") + 1, current.indexOf("/") - 1);
                 if (!previous.equals(current)) {
-                    latitude = links.get(i - 3).toString();
-                    latitude = latitude.replaceAll("[^\\.0123456789-]", "");
-                    double lat = Double.parseDouble(latitude);
-                    longitude = links.get(i - 2).toString();
+                    longitude = links.get(i - 3).toString();
                     longitude = longitude.replaceAll("[^\\.0123456789-]", "");
                     double lon = Double.parseDouble(longitude);
-                    penumLon = lon;
+                    latitude = links.get(i - 2).toString();
+                    latitude = latitude.replaceAll("[^\\.0123456789-]", "");
+                    double lat = Double.parseDouble(latitude);
 
                     vehicleData.put(previous, new Pair<>(lat, lon));
 
                 }
                 if (links.get(i + 4).equals(links.last())) {
-                    penumLat = Double.parseDouble(links.get(i - 3).toString().replaceAll("[^\\.0123456789-]", ""));
-                    penumLon = Double.parseDouble(links.get(i - 2).toString().replaceAll("[^\\.0123456789-]", ""));
+                    penumLon = Double.parseDouble(links.get(i - 3).toString().replaceAll("[^\\.0123456789-]", ""));
+                    penumLat = Double.parseDouble(links.get(i - 2).toString().replaceAll("[^\\.0123456789-]", ""));
 
 
-                    latitude = links.get(i + 2).toString();
+                    longitude = links.get(i + 2).toString();
+                    longitude = longitude.replaceAll("[^\\.0123456789-]", "");
+                    double lon = Double.parseDouble(longitude);
+
+                    lastLon = lon;
+                    latitude = links.get(i + 3).toString();
                     latitude = latitude.replaceAll("[^\\.0123456789-]", "");
                     double lat = Double.parseDouble(latitude);
                     lastLat = lat;
-                    longitude = links.get(i + 3).toString();
-                    longitude = longitude.replaceAll("[^\\.0123456789-]", "");
-                    double lon = Double.parseDouble(longitude);
-                    lastLon = lon;
                     vehicleData.put(current, new Pair<>(lat, lon));
 
                 }
@@ -191,8 +206,10 @@ public class Positions {
         if (proto == null) {
             proto = new IMCProtocol();
         }
+        double ySpeed = 0;
+        double xSpeed = 0;
 
-        double distance = Math.hypot(lastLat - penumLon, lastLon - penumLon);
+
 
         RemoteSensorInfo info = new RemoteSensorInfo();
         System.out.println(data.keySet());
@@ -200,7 +217,11 @@ public class Positions {
 
             info.setLat(Math.toRadians(vehicleData.get(s).getKey()));
             info.setLon(Math.toRadians(vehicleData.get(s).getValue()));
-            info.setHeading((float) Math.atan2(penumLat - lastLat, penumLon - lastLon));
+            
+
+            info.setHeading((float) Math.atan2(ySpeed, xSpeed));
+
+
 
             String setSensor = sensorClass.get(s).replace("/", "");
             info.setSensorClass(setSensor);
@@ -211,14 +232,14 @@ public class Positions {
 
 
 
-
+/*
         try {
 
             proto.setAutoConnect(ConnectFilter.CCUS_ONLY);
             proto.sendToPeers(info);
         } catch (Exception e) {
             e.printStackTrace();
-        }
+        }*/
 
 
     }
@@ -236,10 +257,11 @@ public class Positions {
             obj.add("imcid", data.get(s));
             obj.add("name", s);
             obj.add("coordinates", new JsonArray().add(vehicleData.get(s).getKey()).add(vehicleData.get(s).getValue()));
-
             obj.add("iridium", "");
             obj.add("created_at", fmt.format(new Date()));
             obj.add("updated_at", fmt.format(new Date()));
+
+
         }
 
         System.out.println(obj);
