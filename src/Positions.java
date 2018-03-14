@@ -8,6 +8,7 @@ import pt.lsts.imc.RemoteSensorInfo;
 import pt.lsts.imc.net.ConnectFilter;
 import pt.lsts.imc.net.IMCProtocol;
 import pt.lsts.neptus.messages.listener.Periodic;
+import pt.lsts.util.WGS84Utilities;
 
 
 import java.io.BufferedReader;
@@ -15,6 +16,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.ProtocolException;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -91,7 +94,7 @@ public class Positions {
 
         for (String typeRqst : typeRqstLst.keySet()) {
 
-            String url = "http://odss.mbari.org/trackingdb/" + "positionOfType/" + typeRqst + "last/" + 1 + "h/data.html";
+            String url = "http://odss.mbari.org/trackingdb/" + "positionOfType/" + typeRqst + "last/" + 3 + "h/data.html";
 
             sensorClass2 = typeRqst;
 
@@ -210,16 +213,19 @@ public class Positions {
         double xSpeed = 0;
 
 
+      /*
 
         RemoteSensorInfo info = new RemoteSensorInfo();
         System.out.println(data.keySet());
         for (String s : data.keySet()) {
-
+            //como hash
+            double[] offsets = WGS84Utilities.WGS84displacement(lastLat, lastLon, vehicleData.get(s).getKey(), vehicleData.get(s).getValue());
             info.setLat(Math.toRadians(vehicleData.get(s).getKey()));
             info.setLon(Math.toRadians(vehicleData.get(s).getValue()));
-            
 
-            info.setHeading((float) Math.atan2(ySpeed, xSpeed));
+
+            //
+            info.setHeading((float) Math.atan2(offsets[1], offsets[0]));
 
 
 
@@ -250,34 +256,76 @@ public class Positions {
         String ripplesUrl = "http://ripples.lsts.pt/api/v1/systems";
         SimpleDateFormat fmt = new SimpleDateFormat("YYYY-MM-dd'T'HH:mm:ssZ");
 
-        JsonObject obj = new JsonObject();
+
 
 
         for (String s : data.keySet()) {
-            obj.add("imcid", data.get(s));
-            obj.add("name", s);
-            obj.add("coordinates", new JsonArray().add(vehicleData.get(s).getKey()).add(vehicleData.get(s).getValue()));
-            obj.add("iridium", "");
-            obj.add("created_at", fmt.format(new Date()));
-            obj.add("updated_at", fmt.format(new Date()));
+            new Thread(() -> {
+                JsonObject obj = new JsonObject();
+                obj.add("imcid", data.get(s));
+                obj.add("name", s);
+                obj.add("coordinates", new JsonArray().add(vehicleData.get(s).getKey()).add(vehicleData.get(s).getValue()));
+                obj.add("iridium", "");
+                obj.add("created_at", fmt.format(new Date()));
+                obj.add("updated_at", fmt.format(new Date()));
 
+                URL url = null;
+                try {
+                    url = new URL(ripplesUrl);
+                } catch (MalformedURLException e) {
+                    e.printStackTrace();
+                }
+                HttpURLConnection httpCon = null;
+                try {
+                    httpCon = (HttpURLConnection) url.openConnection();
 
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                httpCon.setDoOutput(true);
+                try {
+                    httpCon.setRequestMethod("PUT");
+
+                } catch (ProtocolException e) {
+                    e.printStackTrace();
+                }
+                httpCon.setRequestProperty("Content-Type", "application/json");
+                OutputStreamWriter out = null;
+
+                try {
+
+                    out = new OutputStreamWriter(httpCon.getOutputStream());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                try {
+
+                    obj.writeTo(out);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                try {
+                    out.close();
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                try {
+
+                    httpCon.getInputStream();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                try {
+
+                    System.out.println("Response: " + httpCon.getResponseMessage());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                System.out.println(obj);
+
+            }).start();
         }
-
-        System.out.println(obj);
-
-
-        URL url = new URL(ripplesUrl);
-        HttpURLConnection httpCon = (HttpURLConnection) url.openConnection();
-        httpCon.setDoOutput(true);
-        httpCon.setRequestMethod("PUT");
-        httpCon.setRequestProperty("Content-Type", "application/json");
-        OutputStreamWriter out = new OutputStreamWriter(httpCon.getOutputStream());
-        obj.writeTo(out);
-        out.close();
-        httpCon.getInputStream();
-        System.out.println("Response: "+httpCon.getResponseMessage());
-
     }
 
 
