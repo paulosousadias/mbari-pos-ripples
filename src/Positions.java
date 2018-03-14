@@ -29,15 +29,16 @@ public class Positions {
     private static final LinkedHashMap<String, String> sensorClass = new LinkedHashMap<>();
     private static String sensorClass2;
     private static HashMap<String, String> typeRqstLst = new LinkedHashMap<>();
-    private static double lastLat = 0;
-    private static double lastLon = 0;
-    private static double penumLat = 0;
-    private static double penumLon = 0;
+    private static LinkedHashMap<String, Double> lastLat = new LinkedHashMap<>();
+    private static LinkedHashMap<String, Double> lastLon = new LinkedHashMap<>();
+    private static LinkedHashMap<String, Double> penumLat = new LinkedHashMap<>();
+    private static LinkedHashMap<String, Double> penumLon = new LinkedHashMap<>();
+
     private static IMCProtocol proto;
 
 
-    public static void main(String[] args) throws Exception {
-        new Thread(() -> {
+    public static void main(String[] args) {
+
             while (true) {
                 try {
                     get();
@@ -50,7 +51,6 @@ public class Positions {
                     e.printStackTrace();
                 }
             }
-        }).start();
 
     }
     private static void get() throws IOException {
@@ -154,7 +154,10 @@ public class Positions {
 
                 current = String.valueOf(links.get(i));
                 current = current.substring(current.indexOf(">") + 1, current.indexOf("/") - 1);
+
+
                 if (!previous.equals(current)) {
+
                     longitude = links.get(i - 3).toString();
                     longitude = longitude.replaceAll("[^\\.0123456789-]", "");
                     double lon = Double.parseDouble(longitude);
@@ -162,23 +165,37 @@ public class Positions {
                     latitude = latitude.replaceAll("[^\\.0123456789-]", "");
                     double lat = Double.parseDouble(latitude);
 
+                    penumLon.put(previous, lon);
+                    penumLat.put(previous, lat);
+                    lastLon.put(previous, lon);
+                    lastLat.put(previous, lat);
+
+
+
+
+
+
                     vehicleData.put(previous, new Pair<>(lat, lon));
 
                 }
                 if (links.get(i + 4).equals(links.last())) {
-                    penumLon = Double.parseDouble(links.get(i - 3).toString().replaceAll("[^\\.0123456789-]", ""));
-                    penumLat = Double.parseDouble(links.get(i - 2).toString().replaceAll("[^\\.0123456789-]", ""));
+                    //se este é o ultimo link
+
+                    penumLon.put(current, Double.parseDouble(links.get(i - 3).toString().replaceAll("[^\\.0123456789-]", "")));
+                    penumLat.put(current, Double.parseDouble(links.get(i - 2).toString().replaceAll("[^\\.0123456789-]", "")));
+
 
 
                     longitude = links.get(i + 2).toString();
                     longitude = longitude.replaceAll("[^\\.0123456789-]", "");
                     double lon = Double.parseDouble(longitude);
 
-                    lastLon = lon;
+
                     latitude = links.get(i + 3).toString();
                     latitude = latitude.replaceAll("[^\\.0123456789-]", "");
                     double lat = Double.parseDouble(latitude);
-                    lastLat = lat;
+                    lastLon.put(current, lon);
+                    lastLat.put(current, lat);
                     vehicleData.put(current, new Pair<>(lat, lon));
 
                 }
@@ -205,26 +222,23 @@ public class Positions {
 
     private static void publishToNeptus(LinkedHashMap<String, Pair<Double, Double>> vehicleData, LinkedHashMap<String, Integer> data) {
 
-
         if (proto == null) {
             proto = new IMCProtocol();
+            proto.setAutoConnect(ConnectFilter.CCUS_ONLY);
         }
-        double ySpeed = 0;
-        double xSpeed = 0;
 
 
-      /*
+
 
         RemoteSensorInfo info = new RemoteSensorInfo();
-        System.out.println(data.keySet());
-        for (String s : data.keySet()) {
-            //como hash
-            double[] offsets = WGS84Utilities.WGS84displacement(lastLat, lastLon, vehicleData.get(s).getKey(), vehicleData.get(s).getValue());
+        for (String s : vehicleData.keySet()) {
+            System.out.println(lastLat.get(s) + " " + lastLon.get(s) + "       " + penumLat.get(s) + "" + penumLon.get(s));
+            double[] offsets = WGS84Utilities.WGS84displacement(lastLat.get(s), lastLon.get(s), 0, penumLat.get(s), penumLon.get(s), 0);
+
             info.setLat(Math.toRadians(vehicleData.get(s).getKey()));
             info.setLon(Math.toRadians(vehicleData.get(s).getValue()));
 
 
-            //
             info.setHeading((float) Math.atan2(offsets[1], offsets[0]));
 
 
@@ -232,20 +246,17 @@ public class Positions {
             String setSensor = sensorClass.get(s).replace("/", "");
             info.setSensorClass(setSensor);
             info.setId(s);
-            System.out.println("Posting " + info);
+
 
         }
 
 
-
-/*
         try {
-
-            proto.setAutoConnect(ConnectFilter.CCUS_ONLY);
             proto.sendToPeers(info);
+            System.out.println("Posting " + info);
         } catch (Exception e) {
             e.printStackTrace();
-        }*/
+        }
 
 
     }
