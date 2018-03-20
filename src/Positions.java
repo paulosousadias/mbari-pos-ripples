@@ -94,7 +94,7 @@ public class Positions {
 
         for (String typeRqst : typeRqstLst.keySet()) {
 
-            String url = "http://odss.mbari.org/trackingdb/" + "positionOfType/" + typeRqst + "last/" + 3 + "h/data.html";
+            String url = "http://odss.mbari.org/trackingdb/" + "positionOfType/" + typeRqst + "last/" + 10 + "h/data.html";
 
             sensorClass2 = typeRqst;
 
