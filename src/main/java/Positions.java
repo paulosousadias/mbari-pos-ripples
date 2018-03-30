@@ -1,15 +1,34 @@
-
-import com.eclipsesource.json.JsonArray;
-import com.eclipsesource.json.JsonObject;
-import javafx.util.Pair;
-import org.jsoup.Jsoup;
-import org.jsoup.select.Elements;
-import pt.lsts.imc.RemoteSensorInfo;
-import pt.lsts.imc.net.ConnectFilter;
-import pt.lsts.imc.net.IMCProtocol;
-import pt.lsts.neptus.messages.listener.Periodic;
-import pt.lsts.util.WGS84Utilities;
-
+/*
+ * Below is the copyright agreement for this code.
+ * 
+ * Copyright (c) 2018, Laboratório de Sistemas e Tecnologia Subaquática
+ * https://www.lsts.pt
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *     - Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     - Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     - Neither the names of IMC, LSTS, IMCJava nor the names of its 
+ *       contributors may be used to endorse or promote products derived from 
+ *       this software without specific prior written permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL LABORATORIO DE SISTEMAS E TECNOLOGIA SUBAQUATICA
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE 
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) 
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT 
+ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *  
+ * author: paulo.sousa.dias@gmail.com
+ */
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -20,8 +39,16 @@ import java.net.MalformedURLException;
 import java.net.ProtocolException;
 import java.net.URL;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 
+import org.apache.commons.math3.util.Pair;
+import org.jsoup.Jsoup;
+import org.jsoup.select.Elements;
+
+import com.eclipsesource.json.JsonArray;
+import com.eclipsesource.json.JsonObject;
 
 public class Positions {
 
@@ -33,8 +60,6 @@ public class Positions {
     private static LinkedHashMap<String, Double> lastLon = new LinkedHashMap<>();
     private static LinkedHashMap<String, Double> penumLat = new LinkedHashMap<>();
     private static LinkedHashMap<String, Double> penumLon = new LinkedHashMap<>();
-
-    private static IMCProtocol proto;
 
 
     public static void main(String[] args) {
@@ -53,8 +78,8 @@ public class Positions {
             }
 
     }
+    
     private static void get() throws IOException {
-
 
         boolean fetchAUVType = true;
 
@@ -68,33 +93,26 @@ public class Positions {
         final String USER_AGENT = "Mozilla/5.0";
 
 
-
-
-
         if (fetchAUVType){
             typeRqstLst.put("auv/", "AUV");
-
         }
         if (fetchGliderType) {
             typeRqstLst.put("glider/", "GLIDER");
-
         }
         if (fetchDrifterType) {
             typeRqstLst.put("drifter/", "DRIFTER");
-
         }
         if (fetchShipType) {
             typeRqstLst.put("ship/", "SHIP");
         }
         if (fetchAISType) {
             typeRqstLst.put("uav/", "AIS");
-
         }
 
 
         for (String typeRqst : typeRqstLst.keySet()) {
 
-            String url = "http://odss.mbari.org/trackingdb/" + "positionOfType/" + typeRqst + "last/" + 10 + "h/data.html";
+            String url = "http://odss.mbari.org/trackingdb/" + "positionOfType/" + typeRqst + "last/" + 72 + "h/data.html";
 
             sensorClass2 = typeRqst;
 
@@ -137,7 +155,6 @@ public class Positions {
         String previous=null;
         String current;
 
-
         final LinkedHashMap<String, Integer> data = new LinkedHashMap<>();
         org.jsoup.nodes.Document doc = Jsoup.parse(resp);
 
@@ -169,11 +186,6 @@ public class Positions {
                     penumLat.put(previous, lat);
                     lastLon.put(previous, lon);
                     lastLat.put(previous, lat);
-
-
-
-
-
 
                     vehicleData.put(previous, new Pair<>(lat, lon));
 
@@ -209,66 +221,13 @@ public class Positions {
                 }
             }
 
-            publishToNeptus(vehicleData, data);
             publishToRipples(vehicleData, data);
-
-
-
         }
-
-
     }
-
-
-    private static void publishToNeptus(LinkedHashMap<String, Pair<Double, Double>> vehicleData, LinkedHashMap<String, Integer> data) {
-
-        if (proto == null) {
-            proto = new IMCProtocol();
-            proto.setAutoConnect(ConnectFilter.CCUS_ONLY);
-        }
-
-
-
-
-        RemoteSensorInfo info = new RemoteSensorInfo();
-        for (String s : vehicleData.keySet()) {
-            System.out.println(lastLat.get(s) + " " + lastLon.get(s) + "       " + penumLat.get(s) + "" + penumLon.get(s));
-            double[] offsets = WGS84Utilities.WGS84displacement(lastLat.get(s), lastLon.get(s), 0, penumLat.get(s), penumLon.get(s), 0);
-
-            info.setLat(Math.toRadians(vehicleData.get(s).getKey()));
-            info.setLon(Math.toRadians(vehicleData.get(s).getValue()));
-
-
-            info.setHeading((float) Math.atan2(offsets[1], offsets[0]));
-
-
-
-            String setSensor = sensorClass.get(s).replace("/", "");
-            info.setSensorClass(setSensor);
-            info.setId(s);
-
-
-        }
-
-
-        try {
-            proto.sendToPeers(info);
-            System.out.println("Posting " + info);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-
-    }
-
-
 
     private static void publishToRipples(LinkedHashMap<String, Pair<Double, Double>> vehicleData, LinkedHashMap<String, Integer> data) throws IOException {
         String ripplesUrl = "http://ripples.lsts.pt/api/v1/systems";
         SimpleDateFormat fmt = new SimpleDateFormat("YYYY-MM-dd'T'HH:mm:ssZ");
-
-
-
 
         for (String s : data.keySet()) {
             new Thread(() -> {
