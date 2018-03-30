@@ -41,8 +41,17 @@ import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 
 import com.eclipsesource.json.JsonArray;
 import com.eclipsesource.json.JsonObject;
@@ -64,6 +73,7 @@ public class Positions {
 	private static HashMap<String, String> typeRqstLst = new LinkedHashMap<>();
 
 	private static Map<String, Platform> platformList = Collections.synchronizedMap(new HashMap<String, Platform>());
+	private static HashSet<String> validPlatformsNames = new HashSet<>();
 
 	private static class Platform {
 		String name;
@@ -165,17 +175,20 @@ public class Positions {
 					String[] tk = line.split(" *?, *?");
 					if (tk.length >= 5) {
 						String name = tk[0];
-						long timeMillis = (long) (Double.parseDouble(tk[1]) * 1E3);
-						double lonDeg = Double.parseDouble(tk[2]);
-						double latDeg = Double.parseDouble(tk[3]);
 						
-						Platform pt = platformList.get(name);
-						if (pt == null) {
-							pt = new Platform(name, timeMillis, latDeg, lonDeg, sensorClass);
-							platformList.put(name, pt);
-						}
-						else {
-							pt.update(timeMillis, latDeg, lonDeg);
+						if (validPlatformsNames.isEmpty() || validPlatformsNames.contains(name.toLowerCase())) {
+							long timeMillis = (long) (Double.parseDouble(tk[1]) * 1E3);
+							double lonDeg = Double.parseDouble(tk[2]);
+							double latDeg = Double.parseDouble(tk[3]);
+							
+							Platform pt = platformList.get(name);
+							if (pt == null) {
+								pt = new Platform(name, timeMillis, latDeg, lonDeg, sensorClass);
+								platformList.put(name, pt);
+							}
+							else {
+								pt.update(timeMillis, latDeg, lonDeg);
+							}
 						}
 					}
 				}
@@ -195,9 +208,6 @@ public class Positions {
 
 		platformList.values().stream().forEach(p -> {
 			try {
-				if (!p.name.equalsIgnoreCase("falkor"))
-					return;
-				
 				if (!p.isUpdated())
 					return;
 				
@@ -238,6 +248,134 @@ public class Positions {
 	}
 
 	public static void main(String[] args) {
+		Options options = new Options();
+		
+		options.addOption(Option.builder("h").required(false).longOpt("help").desc("this help").build());
+		
+		options.addOption(Option.builder().required(false).longOpt("auv").desc("fetch AUVs").hasArg().argName("true/false")
+				.optionalArg(true).type(Boolean.class).build());
+		options.addOption(Option.builder().required(false).longOpt("glider").desc("fetch gliders").hasArg()
+				.argName("true/false").optionalArg(true).type(Boolean.class).build());
+		options.addOption(Option.builder().required(false).longOpt("drifter").desc("fetch drifters").hasArg()
+				.argName("true/false").optionalArg(true).type(Boolean.class).build());
+		options.addOption(Option.builder().required(false).longOpt("ship").desc("fetch ships").hasArg().argName("true/false")
+				.optionalArg(true).type(Boolean.class).build());
+		options.addOption(Option.builder().required(false).longOpt("ais").desc("fetch AISs").hasArg().argName("true/false")
+				.optionalArg(true).type(Boolean.class).build());
+
+		options.addOption(Option.builder("t").required(false).longOpt("time").desc("hours to fetch").hasArg()
+				.argName("HOURS").type(Integer.class).build());
+		options.addOption(Option.builder("p").required(false).longOpt("period").desc("period to run the fetch").hasArg()
+				.argName("MINUTES").type(Integer.class).build());
+
+		options.addOption(Option.builder().required(false).longOpt("only").desc("only process these names (case insensive)").
+				hasArg().argName("name1,name2,...").build());
+
+        HelpFormatter formatter = new HelpFormatter();
+
+		CommandLineParser parser = new DefaultParser();
+		CommandLine line = null;
+		try {
+			line = parser.parse(options, args);
+
+			if(line.hasOption("h")) {
+				formatter.printHelp(" ", options);
+				System.exit(0);
+			}
+		}
+		catch(ParseException exp) {
+			System.err.println("Parsing failed.  Reason: " + exp.getMessage());
+			formatter.printHelp(" ", options);
+			System.exit(1);
+		}
+
+		if(line.hasOption("p")) {
+			try {
+				int p = Integer.parseInt(line.getOptionValue("p"));
+				if (p > 0)
+					periodSeconds = p;
+			}
+			catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
+
+		if(line.hasOption("t")) {
+			try {
+				int t = Integer.parseInt(line.getOptionValue("t"));
+				if (t > 0)
+					hoursToFetch = t;
+			}
+			catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
+
+		if(line.hasOption("auv")) {
+			try {
+				String ar = line.getOptionValue("auv");
+				if (ar != null)
+					fetchAUVType = Boolean.parseBoolean(ar);
+			}
+			catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
+		if(line.hasOption("glider")) {
+			try {
+				String ar = line.getOptionValue("glider");
+				if (ar != null)
+					fetchGliderType = Boolean.parseBoolean(ar);
+			}
+			catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
+		if(line.hasOption("drifter")) {
+			try {
+				String ar = line.getOptionValue("drifter");
+				if (ar != null)
+					fetchDrifterType = Boolean.parseBoolean(ar);
+			}
+			catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
+		if(line.hasOption("ship")) {
+			try {
+				String ar = line.getOptionValue("ship");
+				if (ar != null)
+					fetchShipType = Boolean.parseBoolean(ar);
+			}
+			catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
+		if(line.hasOption("ais")) {
+			try {
+				String ar = line.getOptionValue("ais");
+				if (ar != null)
+					fetchAISType = Boolean.parseBoolean(ar);
+			}
+			catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
+
+		if(line.hasOption("only")) {
+			try {
+				String ar = line.getOptionValue("only");
+				if (ar != null) {
+					String[] tk = ar.split(" *?, *?");
+					for (int i = 0; i < tk.length; i++)
+						validPlatformsNames.add(tk[i].toLowerCase());
+				}
+			}
+			catch (NumberFormatException e) {
+				e.printStackTrace();
+			}
+		}
+
 		long periodMillis = periodSeconds * 1000;
 
 		while (true) {

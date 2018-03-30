@@ -23,12 +23,8 @@ repositories {
 
 dependencies {
     // This dependency is exported to consumers, that is to say found on their compile classpath.
-    compile 'org.apache.commons:commons-math3:3.6.1'
-    compile 'javax.json:javax.json-api:1.0'
-    compile 'org.gaixie.json:json:1.0.0'
-    compile 'javax.json:javax.json-api:1.1.2'
-    compile 'org.jsoup:jsoup:1.11.2'
     compile 'com.eclipsesource.minimal-json:minimal-json:0.9.5'
+    compile 'commons-cli:commons-cli:1.4'
 
 //    compile files('libs/libimc.jar')
 
@@ -40,7 +36,6 @@ dependencies {
 }
 
 jar {
-
    from('.') {
       include 'README.md'
       include 'LICENSE'
@@ -48,7 +43,6 @@ jar {
  
    manifest {
         attributes "Main-Class": "pt.lsts.mbari.Positions", "Implementation-Title": rootProject.name, "Implementation-Version": version
-
     }
  
     from {
